@@ -208,7 +208,7 @@ cartScene.action(/^delItem\d+$/, async ctx => {
 })
 
 pointScene.enter(async ctx => {
-    let res = await api.invoke('getPoints', {})
+    let res = await api.getPoints()
     if (res !== null) {
         ctx.session.salesPoints = res
         let btns = [];
@@ -260,12 +260,9 @@ orderScene.enter(async (ctx) => {
     await ctx.answerCbQuery()
     try { await ctx.deleteMessage() } catch (err) { }
     await ctx.reply('Получаю остатки товаров...')
-    let res = await api.invoke('getNomenclature', {
-        pointId: ctx.session.salePoint,
-        priceListId: ctx.session.salesPoints.find(el => el.id.toString() === ctx.session.salePoint).priceLists[0].id
-    })
+    let res = await api.getNomenclature(ctx.session.salePoint, ctx.session.salesPoints.find(el => el.id.toString() === ctx.session.salePoint).priceLists[0].id)
     if (res !== null) {
-        ctx.session.nomenclr = res.prods
+        ctx.session.nomenclr = res
         showSections(ctx)
     } else {
         await ctx.reply('Ошибка при выполнении запроса. Попробуйте повторить позднее.')
