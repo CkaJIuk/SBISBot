@@ -95,7 +95,7 @@ class SbisApi {
             if (err.response.status == 401) {
                 console.log('Ошибка проверки токена! Повторная авторизация по refreshToken')
                 await this.getNewToken()
-                return await this.getPoints()
+                return await this.getPriceLists(pointId)
             } else console.log('Ошибка! Невозможно подключиться к серверу SBIS!')
         }
         return []
@@ -116,7 +116,7 @@ class SbisApi {
             if (err.response.status == 401) {
                 console.log('Ошибка проверки токена! Повторная авторизация по refreshToken')
                 await this.getNewToken()
-                return await this.getPoints()
+                return await this.getPagefromNomencl(pointId, priceListId, page)
             } else console.log('Ошибка! Невозможно подключиться к серверу SBIS!')
         }
         return []
@@ -140,36 +140,40 @@ class SbisApi {
 
     async createOrder(data) {
         try {
-            let res = await axios.post('https://api.sbis.ru/retail/order/create',
+            return await axios.post(this.server + '/retail/order/create',
                 {
-                    'product': 'delivery',
                     'pointId': data.pointId,
-                    'customer': {
-                        name: data.customerName,
-                        phone: data.customerPhone
-                    },
-                    'nomenclatures': data.prods,
-                    'delivery': {
-                        paymentType: 'cash',
-                        isPickup: true
-                    }
+                    'priceListId': data.priceListId,
+                    'customerName': data.customerName,
+                    'customerPhone': data.customerPhone,
+                    'datetime': new Date().toISOString(),
+                    'Products': data.Products
                 }, { headers: { "Authorization": `Bearer ${this.accessToken}` } })
-
-            //проверка статуса заказа
-            console.log(res)
-            return 2222
-
-            /*if (typeof res.data.priceLists !== 'undefined') {
-                console.log(`Прайс-листы для точки продаж ${pointId} получены`)
-                return res.data.priceLists
-            }
-            else console.log(`Ошибка получения списка прайс-листов для точки продаж ${pointId}!`)*/
         } catch (err) {
             if (err.response.status == 401) {
-                console.log('Ошибка проверки токена! Повторная авторизация.')
-                await new Promise(resolve => setTimeout(resolve, 3000))
-                await this.auth()
+                console.log('Ошибка проверки токена! Повторная авторизация по refreshToken')
+                await this.getNewToken()
                 return await this.createOrder(data)
+            } else console.log('Ошибка! Невозможно подключиться к серверу SBIS!')
+        }
+        return []
+    }
+
+    async getOrders(customerPhone) {
+        try {
+            return await axios.get(this.server + '/retail/order/list',
+                {
+                    params: {
+                        'customerPhone': customerPhone
+                    },
+                    headers: { "Authorization": `Bearer ${this.accessToken}` }
+                })
+
+        } catch (err) {
+            if (err.response.status == 401) {
+                console.log('Ошибка проверки токена! Повторная авторизация по refreshToken')
+                await this.getNewToken()
+                return await this.getOrders(customerPhone)
             } else console.log('Ошибка! Невозможно подключиться к серверу SBIS!')
         }
         return []

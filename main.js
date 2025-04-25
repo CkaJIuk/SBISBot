@@ -1,8 +1,10 @@
 import { Telegraf, Markup, Scenes, session } from 'telegraf'
 import SbisApi from './Services/SBISService.js'
 import dotenv from 'dotenv'
-/*перегруженность заказами время ожидания
-удаление сообщений через свою функцию deleteMessages*/
+
+//TODO: foreach не работает
+//TODO: указаывает номер товара а не его имя
+//TODO: почему то кг в unit товара
 
 dotenv.config()
 
@@ -14,19 +16,21 @@ const cartScene = new Scenes.BaseScene('cartScene')
 mainScene.enter(async ctx => ctx.reply('Выбери интересующий раздел...',
     Markup.keyboard(
         [
-            ['🍻 Предзаказ', '🛒 Корзина'], ['🏪 Магазины', '❓ Обратная связь'],
+            ['🍻 Предзаказ', '🛒 Корзина'],
+            ['🏪 Магазины', '💳 Мои заказы'],
+            ['🎁 Акции', '❓ Обратная связь'],
             [Markup.button.contactRequest('☎ Отправить номер'), '❌ Выйти']
         ])
         .resize()))
 
-/*mainScene.hears('🎁 Акции', async ctx => {
+mainScene.hears('🎁 Акции', async ctx => {
     try { await ctx.deleteMessage() } catch (err) { }
     ctx.reply('В данное време нет действующих акций')
-})*/
+})
 
 mainScene.hears('🍻 Предзаказ', async ctx => {
     try { await ctx.deleteMessage() } catch (err) { }
-    if (typeof ctx.session.u_phone !== 'undefined' && ctx.session.u_phone === '') {
+    if (typeof ctx.session.u_phone == 'undefined') {
         ctx.reply('Для предзаказа необходимо отправить контактные данные. Вы можете это сделать нажав кнопку меню.');
     } else {
         await ctx.reply('Получаю данные...', Markup.removeKeyboard())
@@ -43,18 +47,19 @@ mainScene.hears('🛒 Корзина', async ctx => {
     }
 })
 
-/*mainScene.hears('💳 Мои заказы', async ctx => {
+mainScene.hears('💳 Мои заказы', async ctx => {
     try { await ctx.deleteMessage() } catch (err) { }
-    let res = await api.invoke('getOrders', { customerId: ctx.session.user_id })
+    let res = await api.getOrders(ctx.session.u_phone)
     if (res !== null) {
-        for (let el in res)
-            await ctx.reply(`Заказ № ${res[el].id} создан ${res[el].reg_date} на сумму ${res[el].total_cost}. Статус: ${res[el].status}`)
+        res.forEach(async el => {
+            await ctx.reply(`Заказ № ${res[el].orderId} создан ${res[el].creationDate} на сумму ${res[el].totalPrice}. Статус: ${res[el].status}`)
+        });
         ctx.reply('Выбери интересующий раздел...')
     } else {
         ctx.reply('Ошибка при выполнении запроса. Попробуйте повторить позднее.')
     }
 
-})*/
+})
 
 mainScene.hears('🏪 Магазины', async ctx => {
     try { await ctx.deleteMessage() } catch (err) { }
@@ -62,12 +67,6 @@ mainScene.hears('🏪 Магазины', async ctx => {
 })
 
 mainScene.on('contact', async ctx => {
-    await api.invoke('updCustomer', {
-        id: ctx.message.from.id,
-        data: {
-            phone: ctx.message.contact.phone_number
-        }
-    })
     ctx.session.u_phone = ctx.message.contact.phone_number
     ctx.reply('Контактные данные обновлены')
 })
@@ -138,26 +137,25 @@ cartScene.action('continueShopping', async ctx => {
 cartScene.action('doOrder', async ctx => {
     await ctx.answerCbQuery()
     await deleteMessages(ctx)
-    let prods = []
-    let total = 0
+    let Products = []
     let priceListId = ctx.session.salesPoints.find(el => el.id.toString() === ctx.session.salePoint).priceLists[0].id
     for (let item in ctx.session.cart) {
         let prod = ctx.session.nomenclr.find(el => el.hierarchicalId.toString() === ctx.session.cart[item].id)
-        prods.push({
+        Products.push({
+            id: prod.hierarchicalId,
             count: ctx.session.cart[item].count,
-            hierarchicalId: prod.hierarchicalId,
-            priceListId
+            cost: prod.cost
         })
-        total += ctx.session.cart[item].count * prod.cost
     }
     let data = {
         pointId: ctx.session.salePoint,
-        customerName: ctx.session.user_id,
+        priceListId,
+        customerName: ctx.session.userId,
         customerPhone: ctx.session.u_phone,
-        prods,
-        comments: ''
+        Products
     }
-    let orderId = await api.invoke('createOrder', { data })
+
+    let { orderId } = (await api.createOrder(data)).data
     if (orderId !== null) {
         ctx.session.nomenclr = []
         ctx.session.cart = []
@@ -273,7 +271,7 @@ orderScene.enter(async (ctx) => {
 async function showSections(ctx) {
     let btns = []
     for (let item in ctx.session.nomenclr) {
-        if (typeof ctx.session.nomenclr[item].isParent !== 'undefined' && ctx.session.nomenclr[item].isParent === true)
+        if (ctx.session.nomenclr[item]?.isParent === true)
             btns.push([Markup.button.callback(ctx.session.nomenclr[item].name, `pressSection${ctx.session.nomenclr[item].hierarchicalId.toString()}`)])
     }
     btns.push([Markup.button.callback('🛒 В корзину', 'toCart')])
